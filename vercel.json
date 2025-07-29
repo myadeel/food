@@ -1,0 +1,12 @@
+{
+  "routes": [
+    { 
+      "src": "/api/analyze", 
+      "dest": "/api/analyze.js",
+      "methods": ["POST", "OPTIONS"]
+    }
+  ],
+  "github": {
+    "silent": true
+  }
+}
