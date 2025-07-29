@@ -513,9 +513,8 @@
             const uploadBtn = uploadArea.querySelector('.upload-btn');
             const errorMessage = document.getElementById('error-message');
             
-            // API Configuration
-            const API_ENDPOINT = '/api/analyze'; // For Vercel deployment
-            // For local testing: 'http://localhost:3000/api/analyze'
+            // API Configuration - UPDATE THIS WITH YOUR VERCEL URL
+            const API_ENDPOINT = 'https://your-vercel-app.vercel.app/api/analyze';
             
             // Click on upload area or button to trigger file input
             uploadArea.addEventListener('click', function(e) {
@@ -628,6 +627,13 @@
                             detail: "low" // Optimize for cost: "low", "high", or "auto"
                         })
                     });
+                    
+                    // Handle non-JSON responses
+                    const contentType = response.headers.get('content-type');
+                    if (!contentType || !contentType.includes('application/json')) {
+                        const text = await response.text();
+                        throw new Error(`Server returned: ${text.substring(0, 100)}...`);
+                    }
                     
                     if (!response.ok) {
                         const errorData = await response.json();
