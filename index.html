@@ -387,6 +387,16 @@
             100% { transform: rotate(360deg); }
         }
 
+        .error-message {
+            display: none;
+            background: rgba(244, 67, 54, 0.1);
+            border-left: 4px solid var(--danger);
+            padding: 15px;
+            border-radius: 0 8px 8px 0;
+            margin: 15px 0;
+            color: var(--danger);
+        }
+
         @media (max-width: 768px) {
             .main-content {
                 flex-direction: column;
@@ -427,8 +437,10 @@
                 
                 <div class="loading" id="loading">
                     <div class="spinner"></div>
-                    <p>Analyzing ingredients... This may take a moment</p>
+                    <p>Analyzing ingredients... This may take 10-20 seconds</p>
                 </div>
+                
+                <div class="error-message" id="error-message"></div>
                 
                 <button class="analyze-btn" id="analyze-btn" disabled>
                     <i class="fas fa-search"></i> Analyze Ingredients
@@ -447,39 +459,36 @@
                     
                     <div class="analysis-card" id="analysis-result">
                         <div class="health-status">
-                            <div class="status-icon status-healthy">
+                            <div class="status-icon" id="status-icon">
                                 <i class="fas fa-check"></i>
                             </div>
                             <div class="status-text">
-                                <h3>Generally Healthy</h3>
-                                <p>This product contains mostly natural ingredients</p>
+                                <h3 id="status-title">Generally Healthy</h3>
+                                <p id="status-description">This product contains mostly natural ingredients</p>
                             </div>
                         </div>
                         
                         <div class="analysis-section">
                             <h4><i class="fas fa-check-circle"></i> Summary</h4>
-                            <p>This product appears to be a relatively healthy choice. It contains several natural ingredients and minimal artificial additives. The ingredient list shows mostly whole food components without excessive added sugars or concerning preservatives.</p>
+                            <p id="summary-text">This product appears to be a relatively healthy choice. It contains several natural ingredients and minimal artificial additives.</p>
                         </div>
                         
                         <div class="analysis-section">
                             <h4><i class="fas fa-vial"></i> Key Ingredients Analysis</h4>
-                            <ul class="ingredient-list">
+                            <ul class="ingredient-list" id="ingredients-list">
                                 <li><strong>Organic Oats:</strong> Excellent source of fiber and complex carbohydrates</li>
                                 <li><strong>Almonds:</strong> Provide healthy fats, protein, and vitamin E</li>
-                                <li><strong>Honey:</strong> Natural sweetener with antioxidants (better than refined sugar)</li>
-                                <li><strong>Sea Salt:</strong> Better than regular table salt due to trace minerals</li>
-                                <li><strong>Sunflower Oil:</strong> Contains vitamin E but high in omega-6 fats - consume in moderation</li>
                             </ul>
                         </div>
                         
                         <div class="analysis-section">
                             <h4><i class="fas fa-exclamation-triangle"></i> Potential Concerns</h4>
-                            <p>The product contains a small amount of natural flavorings. While these are generally recognized as safe, some sensitive individuals may prefer to avoid them. The sunflower oil, while not harmful, is high in omega-6 fatty acids which should be balanced with omega-3s in your diet.</p>
+                            <p id="concerns-text">The product contains a small amount of natural flavorings. While these are generally recognized as safe, some sensitive individuals may prefer to avoid them.</p>
                         </div>
                         
                         <div class="recommendation">
                             <h4><i class="fas fa-lightbulb"></i> Recommendation</h4>
-                            <p>This product is a good choice for regular consumption. It provides wholesome nutrition with minimal processing. However, as with any food, enjoy it as part of a balanced diet. If you're watching your sugar intake, note that honey is still a form of sugar, though more natural than refined alternatives.</p>
+                            <p id="recommendation-text">This product is a good choice for regular consumption. It provides wholesome nutrition with minimal processing.</p>
                         </div>
                     </div>
                 </div>
@@ -493,6 +502,7 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            // DOM Elements
             const uploadArea = document.getElementById('upload-area');
             const fileInput = document.getElementById('file-input');
             const imagePreview = document.getElementById('image-preview');
@@ -501,6 +511,11 @@
             const analysisResult = document.getElementById('analysis-result');
             const loadingIndicator = document.getElementById('loading');
             const uploadBtn = uploadArea.querySelector('.upload-btn');
+            const errorMessage = document.getElementById('error-message');
+            
+            // API Configuration
+            const API_ENDPOINT = '/api/analyze'; // For Vercel deployment
+            // For local testing: 'http://localhost:3000/api/analyze'
             
             // Click on upload area or button to trigger file input
             uploadArea.addEventListener('click', function(e) {
@@ -517,15 +532,30 @@
             // Handle file selection
             fileInput.addEventListener('change', function() {
                 if (this.files && this.files[0]) {
+                    const file = this.files[0];
+                    
+                    // Validate file type
+                    if (!file.type.match('image.*')) {
+                        showError('Please select a valid image file (JPEG, PNG, etc.)');
+                        return;
+                    }
+                    
+                    // Validate file size (max 5MB)
+                    if (file.size > 5 * 1024 * 1024) {
+                        showError('File size exceeds 5MB limit. Please choose a smaller image.');
+                        return;
+                    }
+                    
                     const reader = new FileReader();
                     
                     reader.onload = function(e) {
                         imagePreview.src = e.target.result;
                         imagePreview.style.display = 'block';
                         analyzeBtn.disabled = false;
+                        hideError();
                     }
                     
-                    reader.readAsDataURL(this.files[0]);
+                    reader.readAsDataURL(file);
                 }
             });
             
@@ -544,6 +574,20 @@
                 this.classList.remove('dragover');
                 
                 if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    const file = e.dataTransfer.files[0];
+                    
+                    // Validate file type
+                    if (!file.type.match('image.*')) {
+                        showError('Please select a valid image file (JPEG, PNG, etc.)');
+                        return;
+                    }
+                    
+                    // Validate file size (max 5MB)
+                    if (file.size > 5 * 1024 * 1024) {
+                        showError('File size exceeds 5MB limit. Please choose a smaller image.');
+                        return;
+                    }
+                    
                     fileInput.files = e.dataTransfer.files;
                     
                     const reader = new FileReader();
@@ -552,79 +596,115 @@
                         imagePreview.src = e.target.result;
                         imagePreview.style.display = 'block';
                         analyzeBtn.disabled = false;
+                        hideError();
                     }
                     
-                    reader.readAsDataURL(e.dataTransfer.files[0]);
+                    reader.readAsDataURL(file);
                 }
             });
             
             // Analyze button click
-            analyzeBtn.addEventListener('click', function() {
-                // Show loading indicator
-                loadingIndicator.style.display = 'block';
-                analyzeBtn.disabled = true;
-                
-                // Simulate API call delay
-                setTimeout(function() {
-                    // Hide loading indicator
-                    loadingIndicator.style.display = 'none';
+            analyzeBtn.addEventListener('click', async function() {
+                try {
+                    // Reset UI
+                    hideError();
+                    loadingIndicator.style.display = 'block';
+                    analyzeBtn.disabled = true;
                     
-                    // Hide placeholder and show result
+                    const file = fileInput.files[0];
+                    
+                    // Convert image to base64
+                    const base64Data = await toBase64(file);
+                    const base64Content = base64Data.split(',')[1];
+                    
+                    // Call API
+                    const response = await fetch(API_ENDPOINT, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ 
+                            imageBase64: base64Content,
+                            detail: "low" // Optimize for cost: "low", "high", or "auto"
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || 'Analysis failed');
+                    }
+                    
+                    const analysis = await response.json();
+                    
+                    // Update UI with analysis
+                    updateAnalysisUI(analysis);
+                    
+                    // Show results
                     resultPlaceholder.style.display = 'none';
                     analysisResult.style.display = 'block';
                     
-                    // Enable analyze button again
+                } catch (error) {
+                    console.error('Analysis error:', error);
+                    showError(`Analysis failed: ${error.message}. Please try again.`);
+                } finally {
+                    loadingIndicator.style.display = 'none';
                     analyzeBtn.disabled = false;
-                }, 2500);
-            });
-            
-            // Simulate different analysis results for demo purposes
-            document.addEventListener('keydown', function(e) {
-                // Press 1 for healthy result
-                if (e.key === '1') {
-                    simulateAnalysis('healthy');
-                }
-                // Press 2 for caution result
-                else if (e.key === '2') {
-                    simulateAnalysis('caution');
-                }
-                // Press 3 for harmful result
-                else if (e.key === '3') {
-                    simulateAnalysis('harmful');
                 }
             });
             
-            function simulateAnalysis(status) {
-                const statusIcon = analysisResult.querySelector('.status-icon');
-                const statusTitle = analysisResult.querySelector('.status-text h3');
-                const statusDesc = analysisResult.querySelector('.status-text p');
-                
+            // Helper functions
+            async function toBase64(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(file);
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = error => reject(error);
+                });
+            }
+            
+            function updateAnalysisUI(analysis) {
+                // Update status
+                const statusIcon = document.getElementById('status-icon');
                 statusIcon.innerHTML = '';
                 statusIcon.classList.remove('status-healthy', 'status-caution', 'status-harmful');
                 
-                if (status === 'healthy') {
+                if (analysis.status.includes('Healthy')) {
                     statusIcon.classList.add('status-healthy');
                     statusIcon.innerHTML = '<i class="fas fa-check"></i>';
-                    statusTitle.textContent = 'Generally Healthy';
-                    statusDesc.textContent = 'This product contains mostly natural ingredients';
-                } 
-                else if (status === 'caution') {
+                } else if (analysis.status.includes('Caution')) {
                     statusIcon.classList.add('status-caution');
                     statusIcon.innerHTML = '<i class="fas fa-exclamation"></i>';
-                    statusTitle.textContent = 'Exercise Caution';
-                    statusDesc.textContent = 'Contains some ingredients that may be concerning';
-                } 
-                else if (status === 'harmful') {
+                } else {
                     statusIcon.classList.add('status-harmful');
                     statusIcon.innerHTML = '<i class="fas fa-times"></i>';
-                    statusTitle.textContent = 'Potentially Harmful';
-                    statusDesc.textContent = 'Contains several ingredients of concern';
                 }
                 
-                // Show the result
-                loadingIndicator.style.display = 'none';
-                resultPlaceholder.style.display = 'none';
-                analysisResult.style.display = 'block';
+                document.getElementById('status-title').textContent = analysis.status;
+                document.getElementById('status-description').textContent = analysis.summary;
+                document.getElementById('summary-text').textContent = analysis.summary;
+                
+                // Update ingredients list
+                const ingredientsList = document.getElementById('ingredients-list');
+                ingredientsList.innerHTML = '';
+                
+                analysis.keyIngredients.forEach(ingredient => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `<strong>${ingredient.name}:</strong> ${ingredient.analysis}`;
+                    ingredientsList.appendChild(li);
+                });
+                
+                // Update concerns and recommendation
+                document.getElementById('concerns-text').textContent = analysis.concerns;
+                document.getElementById('recommendation-text').textContent = analysis.recommendation;
+            }
+            
+            function showError(message) {
+                errorMessage.textContent = message;
+                errorMessage.style.display = 'block';
+            }
+            
+            function hideError() {
+                errorMessage.style.display = 'none';
             }
         });
     </script>
